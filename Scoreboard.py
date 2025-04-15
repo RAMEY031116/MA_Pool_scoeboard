@@ -11,7 +11,7 @@ try:
 except FileNotFoundError:
     df = pd.DataFrame(columns=["Date", "Player 1", "Player 2", "Score"])
 
-# Ensure correct column names
+# Ensure correct column names & strip any extra spaces
 df.columns = df.columns.str.strip()
 
 # Show current scoreboard
@@ -19,7 +19,11 @@ st.title("🏆 Pool Scoreboard App")
 st.write("Daily match scores & overall leaderboard")
 
 # Display scores in "Player 1 - Player 2" format
-df["Score"] = df["Player 1"].astype(str) + "-" + df["Player 2"].astype(str)
+if "Player 1" in df.columns and "Player 2" in df.columns:
+    df["Score"] = df["Player 1"].astype(str) + "-" + df["Player 2"].astype(str)
+else:
+    st.error("Error: Column names in scoreboard.csv are incorrect! Please check headers.")
+
 st.dataframe(df[["Date", "Score"]])
 
 # Input new scores
@@ -32,7 +36,9 @@ submit = st.button("Save Scores")
 # Update CSV and save new scores
 if submit:
     new_data = {"Date": date_today, "Player 1": player1_score, "Player 2": player2_score, "Score": f"{player1_score}-{player2_score}"}
-    df = df.append(new_data, ignore_index=True)
+    
+    # Use pd.concat instead of deprecated .append()
+    df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
     df.to_csv(csv_file, index=False)
     
     st.success(f"Scores saved: {player1_score}-{player2_score} for {date_today} 🎱")
