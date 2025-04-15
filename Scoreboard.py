@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
+# Define CSV file location
 csv_file = "scoreboard.csv"
 
 # Load existing data
@@ -10,11 +11,14 @@ try:
 except FileNotFoundError:
     df = pd.DataFrame(columns=["Date", "Player 1", "Player 2", "Score"])
 
+# Ensure correct column names
+df.columns = df.columns.str.strip()
+
 # Show current scoreboard
 st.title("🏆 Pool Scoreboard App")
 st.write("Daily match scores & overall leaderboard")
 
-# Format scores as "Player 1 - Player 2"
+# Display scores in "Player 1 - Player 2" format
 df["Score"] = df["Player 1"].astype(str) + "-" + df["Player 2"].astype(str)
 st.dataframe(df[["Date", "Score"]])
 
@@ -25,7 +29,7 @@ player1_score = st.number_input("Player 1 Score", min_value=0)
 player2_score = st.number_input("Player 2 Score", min_value=0)
 submit = st.button("Save Scores")
 
-# Update CSV
+# Update CSV and save new scores
 if submit:
     new_data = {"Date": date_today, "Player 1": player1_score, "Player 2": player2_score, "Score": f"{player1_score}-{player2_score}"}
     df = df.append(new_data, ignore_index=True)
@@ -39,6 +43,6 @@ total_scores = df[["Player 1", "Player 2"]].sum()
 st.subheader("🏅 Total Scores")
 st.write(f"Player 1: **{total_scores['Player 1']}** | Player 2: **{total_scores['Player 2']}**")
 
-# Determine who's winning
+# Determine who is winning
 winning_player = "Player 1" if total_scores["Player 1"] > total_scores["Player 2"] else "Player 2"
 st.subheader(f"🥇 Leading Player: {winning_player}!")
