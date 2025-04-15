@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-csv_file = "pool_scores.csv"
+csv_file = "scoreboard.csv"
 
 # Load existing data
 try:
