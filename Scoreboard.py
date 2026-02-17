@@ -5,7 +5,7 @@ import io
 st.set_page_config(page_title="Excel Sheet Combiner", layout="centered")
 
 # --- Header ---
-st.title("📊 Excel Sheet Combiner")
+st.title("📊 Excel Sheet Combiner ( bipzilla")
 st.write("Upload multiple Excel files and combine selected sheets into one workbook.")
 
 uploaded_files = st.file_uploader(
