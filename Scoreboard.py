@@ -1,54 +1,56 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+import io
 
-# Define CSV file location
-csv_file = "scoreboard.csv"
+st.title("Excel Sheet Combiner")
+st.write("Upload multiple Excel files and combine sheets into one workbook.")
 
-# Load existing data
-try:
-    df = pd.read_csv(csv_file)
-except FileNotFoundError:
-    df = pd.DataFrame(columns=["Date", "Dragon Warrior", "Iron Phantom", "Score"])
+uploaded_files = st.file_uploader(
+    "Upload Excel Files",
+    type=["xlsx"],
+    accept_multiple_files=True
+)
 
-# Ensure correct column names & strip any extra spaces
-df.columns = df.columns.str.strip()
+sheet_to_extract = st.text_input(
+    "Sheet name to extract (leave blank to extract ALL sheets)",
+    value=""
+)
 
-# Show current scoreboard
-st.title("🏆 Pool Scoreboard App")
-st.write("Daily match scores & overall leaderboard")
+if st.button("Combine Excel Files"):
+    if not uploaded_files:
+        st.error("Please upload at least one Excel file.")
+    else:
+        output = pd.ExcelWriter("combined.xlsx", engine="openpyxl")
 
-# Display scores in "Dragon Warrior - Iron Phantom" format
-if "Dragon Warrior" in df.columns and "Iron Phantom" in df.columns:
-    df["Score"] = df["Dragon Warrior"].astype(str) + "-" + df["Iron Phantom"].astype(str)
-else:
-    st.error("Error: Column names in scoreboard.csv are incorrect! Please check headers.")
+        for file in uploaded_files:
+            file_name = file.name.replace(".xlsx", "")
+            excel_file = pd.ExcelFile(file)
 
-st.dataframe(df[["Date", "Score"]])
+            # If user wants a specific sheet
+            if sheet_to_extract:
+                if sheet_to_extract in excel_file.sheet_names:
+                    df = pd.read_excel(excel_file, sheet_name=sheet_to_extract)
+                    sheet_name = f"{sheet_to_extract}_{file_name}"
+                    df.to_excel(output, sheet_name=sheet_name, index=False)
+                else:
+                    st.warning(f"{sheet_to_extract} not found in {file.name}")
+            else:
+                # Extract all sheets
+                for sheet in excel_file.sheet_names:
+                    df = pd.read_excel(excel_file, sheet_name=sheet)
+                    sheet_name = f"{sheet}_{file_name}"
+                    df.to_excel(output, sheet_name=sheet_name, index=False)
 
-# Input new scores
-st.subheader("📅 Add Today's Scores")
-date_today = datetime.today().strftime('%Y-%m-%d')
-dragon_warrior_score = st.number_input("Dragon Warrior Score", min_value=0)
-iron_phantom_score = st.number_input("Iron Phantom Score", min_value=0)
-submit = st.button("Save Scores")
+        output.save()
 
-# Update CSV and save new scores
-if submit:
-    new_data = {"Date": date_today, "Dragon Warrior": dragon_warrior_score, "Iron Phantom": iron_phantom_score, "Score": f"{dragon_warrior_score}-{iron_phantom_score}"}
-    
-    # Use pd.concat instead of deprecated .append()
-    df = pd.concat([df, pd.DataFrame([new_data])], ignore_index=True)
-    df.to_csv(csv_file, index=False)
-    
-    st.success(f"Scores saved: {dragon_warrior_score}-{iron_phantom_score} for {date_today} 🎱")
-    st.balloons()
+        # Download link
+        with open("combined.xlsx", "rb") as f:
+            st.download_button(
+                label="Download Combined Excel File",
+                data=f,
+                file_name="combined.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 
-# Calculate total scores
-total_scores = df[["Dragon Warrior", "Iron Phantom"]].sum()
-st.subheader("🏅 Total Scores")
-st.write(f"Dragon Warrior: **{total_scores['Dragon Warrior']}** | Iron Phantom: **{total_scores['Iron Phantom']}**")
-
-# Determine who is winning
-winning_player = "Dragon Warrior" if total_scores["Dragon Warrior"] > total_scores["Iron Phantom"] else "Iron Phantom"
-st.subheader(f"🥇 Leading Player: {winning_player}!")
+        st.success("Excel files combined successfully!")
+``
