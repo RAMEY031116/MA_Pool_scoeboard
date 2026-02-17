@@ -3,10 +3,11 @@ from openpyxl import load_workbook, Workbook
 import re
 import io
 
+# --- Page setup ---
 st.set_page_config(page_title="Excel Sheet Combiner", layout="centered")
 
-st.title("📊 Excel Sheet Combiner (Keeps Formatting + Formulas)")
-st.write("Upload Excel files and extract sheets with **all formatting preserved**.")
+st.title("📊 Excel Sheet Combiner (Preserves Formatting & Formulas)")
+st.write("Combine sheets from multiple Excel files while keeping ALL formatting and formulas.")
 
 uploaded_files = st.file_uploader(
     "📁 Upload Excel Files",
@@ -15,96 +16,133 @@ uploaded_files = st.file_uploader(
 )
 
 sheet_to_extract = st.text_input(
-    "🔎 Sheet name to extract (leave blank to extract **all sheets**)",
+    "🔎 Sheet name to extract (leave empty to extract ALL sheets):",
     value=""
 )
 
 st.markdown("---")
 
-def extract_clean_name(filename):
-    # Remove leading numbers and underscores
-    clean = re.sub(r"^\d+[_-]*\s*", "", filename)
-    clean = clean.replace(".xlsx", "")
-    return clean.strip()
+# ----------- Helper function: clean filename ----------
+def clean_filename(filename: str) -> str:
+    # Example: "20260211_4467 South Acton ESG.xlsx" → "South Acton ESG"
+    filename = filename.replace(".xlsx", "")
+    cleaned = re.sub(r"^\d+[_\-]*\d*\s*", "", filename).strip()
+    return cleaned
 
+
+# ----------- Main Logic -------------
 if st.button("🚀 Combine Excel Files"):
     if not uploaded_files:
-        st.error("⚠️ Please upload at least one Excel file.")
-    else:
-        progress = st.progress(0)
-        status = st.empty()
+        st.error("⚠ Please upload at least one file.")
+        st.stop()
 
-        output_wb = Workbook()
-        # Remove default empty sheet
-        default_sheet = output_wb.active
-        output_wb.remove(default_sheet)
+    progress = st.progress(0)
+    status = st.empty()
 
-        total_files = len(uploaded_files)
+    output_wb = Workbook()
+    default_sheet = output_wb.active
+    output_wb.remove(default_sheet)  # Remove blank sheet
 
-        for idx, uploaded in enumerate(uploaded_files):
-            status.text(f"Processing **{uploaded.name}**...")
+    total = len(uploaded_files)
 
-            wb = load_workbook(uploaded, data_only=False)  # keeps formulas
+    for index, uploaded in enumerate(uploaded_files):
+        status.text(f"Processing **{uploaded.name}** ...")
 
-            base_name = extract_clean_name(uploaded.name)
+        # Load workbook with formulas preserved
+        wb = load_workbook(uploaded, data_only=False)
 
-            if sheet_to_extract:
-                if sheet_to_extract in wb.sheetnames:
-                    source_sheet = wb[sheet_to_extract]
-                    new_sheet = output_wb.create_sheet(f"{base_name} - {sheet_to_extract}")
+        cleaned_name = clean_filename(uploaded.name)
 
-                    # Copy cells, formatting, merges, column widths
-                    for row in source_sheet:
-                        for cell in row:
-                            new_cell = new_sheet[cell.coordinate]
-                            new_cell.value = cell.value
-                            if cell.has_style:
-                                new_cell._style = cell._style
-                            new_cell.number_format = cell.number_format
-
-                    # Copy column widths
-                    for col_letter, col_dim in source_sheet.column_dimensions.items():
-                        new_sheet.column_dimensions[col_letter].width = col_dim.width
-
-                    # Copy row heights
-                    for row_idx, row_dim in source_sheet.row_dimensions.items():
-                        new_sheet.row_dimensions[row_idx].height = row_dim.height
-
-                else:
-                    st.warning(f"⚠️ Sheet '{sheet_to_extract}' not found in {uploaded.name}")
-
+        # If specific sheet requested
+        if sheet_to_extract:
+            if sheet_to_extract not in wb.sheetnames:
+                st.warning(f"⚠ Sheet '{sheet_to_extract}' not found in {uploaded.name}")
             else:
-                # Copy all sheets
-                for sheet_name in wb.sheetnames:
-                    source_sheet = wb[sheet_name]
-                    new_sheet = output_wb.create_sheet(f"{base_name} - {sheet_name}")
+                source_sheet = wb[sheet_to_extract]
+                new_sheet_name = f"{cleaned_name} - {sheet_to_extract}"
+                new_sheet = output_wb.create_sheet(new_sheet_name)
 
-                    for row in source_sheet:
-                        for cell in row:
-                            new_cell = new_sheet[cell.coordinate]
-                            new_cell.value = cell.value
-                            if cell.has_style:
-                                new_cell._style = cell._style
-                            new_cell.number_format = cell.number_format
+                # Copy cell values + styles
+                for row in source_sheet.iter_rows():
+                    for cell in row:
+                        new_cell = new_sheet[cell.coordinate]
+                        new_cell.value = cell.value
 
-                    for col_letter, col_dim in source_sheet.column_dimensions.items():
-                        new_sheet.column_dimensions[col_letter].width = col_dim.width
+                        if cell.has_style:
+                            if cell.font:
+                                new_cell.font = cell.font.copy()
+                            if cell.border:
+                                new_cell.border = cell.border.copy()
+                            if cell.fill:
+                                new_cell.fill = cell.fill.copy()
+                            if cell.number_format:
+                                new_cell.number_format = cell.number_format
+                            if cell.protection:
+                                new_cell.protection = cell.protection.copy()
+                            if cell.alignment:
+                                new_cell.alignment = cell.alignment.copy()
 
-                    for row_idx, row_dim in source_sheet.row_dimensions.items():
-                        new_sheet.row_dimensions[row_idx].height = row_dim.height
+                # Copy merged cells
+                for merged_range in source_sheet.merged_cells.ranges:
+                    new_sheet.merge_cells(str(merged_range))
 
-            progress.progress((idx + 1) / total_files)
+                # Copy column widths & row heights
+                for col_letter, dim in source_sheet.column_dimensions.items():
+                    new_sheet.column_dimensions[col_letter].width = dim.width
 
-        # Save combined file
-        output_path = "combined.xlsx"
-        output_wb.save(output_path)
+                for row_idx, dim in source_sheet.row_dimensions.items():
+                    new_sheet.row_dimensions[row_idx].height = dim.height
 
-        with open(output_path, "rb") as f:
-            st.download_button(
-                "⬇️ Download Combined Excel File",
-                f,
-                file_name="combined.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+        else:
+            # Extract ALL sheets
+            for sh in wb.sheetnames:
+                source_sheet = wb[sh]
+                new_sheet_name = f"{cleaned_name} - {sh}"
+                new_sheet = output_wb.create_sheet(new_sheet_name)
 
-        st.success("🎉 Sheets merged with full formatting + formulas preserved!")
+                # Copy cell values + styles
+                for row in source_sheet.iter_rows():
+                    for cell in row:
+                        new_cell = new_sheet[cell.coordinate]
+                        new_cell.value = cell.value
+
+                        if cell.has_style:
+                            if cell.font:
+                                new_cell.font = cell.font.copy()
+                            if cell.border:
+                                new_cell.border = cell.border.copy()
+                            if cell.fill:
+                                new_cell.fill = cell.fill.copy()
+                            if cell.number_format:
+                                new_cell.number_format = cell.number_format
+                            if cell.protection:
+                                new_cell.protection = cell.protection.copy()
+                            if cell.alignment:
+                                new_cell.alignment = cell.alignment.copy()
+
+                # Copy merged cells
+                for merged_range in source_sheet.merged_cells.ranges:
+                    new_sheet.merge_cells(str(merged_range))
+
+                # Copy dimensions
+                for col_letter, dim in source_sheet.column_dimensions.items():
+                    new_sheet.column_dimensions[col_letter].width = dim.width
+
+                for row_idx, dim in source_sheet.row_dimensions.items():
+                    new_sheet.row_dimensions[row_idx].height = dim.height
+
+        progress.progress((index + 1) / total)
+
+    # Save output
+    output_path = "combined.xlsx"
+    output_wb.save(output_path)
+
+    with open(output_path, "rb") as f:
+        st.download_button(
+            "⬇ Download Combined Excel File",
+            f,
+            file_name="combined.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+
+    st.success("🎉 Done! Sheets combined with FULL formatting + formulas preserved.")
